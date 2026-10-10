@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+  <body>
+    <h1>Try to close this tab or click a link</h1>
+    <a href="https://example.com">Leave Page</a>
+    <script>
+      window.addEventListener("beforeunload", function (e) {
+        e.preventDefault();
+        e.returnValue = ""; // Required for modern browsers to trigger the dialog
+      });
+    </script>
+  </body>
+</html>

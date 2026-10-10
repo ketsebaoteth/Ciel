@@ -605,14 +605,9 @@ onFinished: {
                 if (!tabDelegateV.isClosing) {
                     tabModel.currentIndex = tabDelegateV.index;
                 }
+              } else if (mouse.button === Qt.RightButton) {
+                  tabContextMenu.popup(mouse.x, mouse.y, this);
               }
-else if (mouse.button === Qt.RightButton) {
-    const globalPos = mapToGlobal(mouse.x, mouse.y);
-    
-    const localPos = window.contentItem.mapFromGlobal(globalPos.x, globalPos.y);
-    
-    tabContextMenu.openAt(localPos.x, localPos.y);
-}
         }
 
         onPositionChanged: mouse => {
@@ -944,10 +939,10 @@ else if (mouse.button === Qt.RightButton) {
     }
 
 
-CielDropDown {
+CielContextMenu {
     id: tabContextMenu
-    trigger: visualContentV
-    useAbsoluteCoordinates: true
+    // trigger: visualContentV
+    // useAbsoluteCoordinates: true
 
 
     CielMenuItem {

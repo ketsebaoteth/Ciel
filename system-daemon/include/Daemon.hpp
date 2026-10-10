@@ -4,6 +4,7 @@
 #include "NotificationService.hpp"
 #include "SystemStatsService.hpp"
 #include "ThemeService.hpp"
+#include "mountService/MountService.hpp"
 #include <QObject>
 #include <memory>
 
@@ -18,4 +19,5 @@ private:
   std::unique_ptr<NotificationService> m_notificationService;
   std::unique_ptr<SystemStatsService> m_systemStatsService;
   std::unique_ptr<DownloadService> m_downloadService;
+  std::unique_ptr<MountService> m_mountService;
 };

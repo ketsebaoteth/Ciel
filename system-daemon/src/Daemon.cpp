@@ -1,6 +1,7 @@
 #include "Daemon.hpp"
 #include "CielNotificationsAdaptor.h"
 #include "DownloadsAdaptor.h"
+#include "MountAdaptor.h"
 #include "NotificationsAdaptor.h"
 #include "SystemStatsAdaptor.h"
 #include "ThemeAdaptor.h"
@@ -43,8 +44,14 @@ bool Daemon::init() {
   connection.registerObject("/org/ciel/SystemStats",
                             m_systemStatsService.get());
 
+  connection.registerService("org.ciel.Mount");
+  m_mountService = std::make_unique<MountService>(this);
+  new MountAdaptor(m_mountService.get());
+  connection.registerObject("/org/ciel/Mount", m_mountService.get());
+  m_mountService->start(); // after registration, so no signal is lost
+
   qInfo() << "[Daemon] Services registered successfully:"
           << "org.ciel.Theme, org.freedesktop.Notifications, "
-             "org.ciel.Notifications, org.ciel.Downloads, org.ciel.SystemStats";
+             "org.ciel.Notifications, org.ciel.Downloads, org.ciel.SystemStats, org.ciel.Mount";
   return true;
 }

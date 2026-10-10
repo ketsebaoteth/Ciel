@@ -1,0 +1,47 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.ciel.Mount">
+    <property name="MountedDevices" type="a(sssb)" access="read">
+      <annotation name="org.qtproject.QtDBus.QtTypeName" value="QList&lt;MountedVolume&gt;"/>
+    </property>
+    <property name="AutoMount" type="b" access="readwrite"/>
+
+    <method name="ListMounted">
+      <arg name="devices" type="a(sssb)" direction="out"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QList&lt;MountedVolume&gt;"/>
+    </method>
+    <method name="EjectDevice">
+      <arg name="devicePath" type="s" direction="in"/>
+      <arg name="success" type="b" direction="out"/>
+      <arg name="errorMessage" type="s" direction="out"/>
+    </method>
+    <method name="MountDevice">
+      <arg name="devicePath" type="s" direction="in"/>
+      <arg name="success" type="b" direction="out"/>
+    </method>
+
+    <signal name="DeviceMounted">
+      <arg name="devicePath" type="s"/>
+      <arg name="label" type="s"/>
+      <arg name="mountPoint" type="s"/>
+    </signal>
+    <signal name="DeviceUnmounted">
+      <arg name="devicePath" type="s"/>
+    </signal>
+    <signal name="EjectFailed">
+      <arg name="devicePath" type="s"/>
+      <arg name="reason" type="s"/>
+    </signal>
+    <signal name="DeviceInserted">
+      <arg name="devicePath" type="s"/>
+    </signal>
+    <signal name="DeviceEjected">
+      <arg name="devicePath" type="s"/>
+    </signal>
+    <signal name="MountFailed">
+      <arg name="devicePath" type="s"/>
+      <arg name="reason" type="s"/>
+    </signal>
+  </interface>
+</node>

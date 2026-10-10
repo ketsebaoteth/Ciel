@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Ciel Engine - Advanced Non-JS Dialog Stress Sandbox</title>
+    <style>
+        body { font-family: monospace; background: #0c0c0e; color: #d4d4d8; padding: 2rem; }
+        h1, h3 { color: #f4f4f5; border-bottom: 1px solid #27272a; padding-bottom: 0.5rem; }
+        .section { margin-bottom: 2rem; background: #141416; padding: 1.5rem; border-radius: 6px; border: 1px solid #27272a; }
+        button, input[type="button"] { background: #27272a; color: #fff; border: 1px solid #3f3f46; padding: 10px 16px; font-weight: bold; cursor: pointer; border-radius: 4px; }
+        button:hover { background: #3f3f46; }
+        a { color: #3b82f6; text-decoration: none; font-weight: bold; }
+        #log { background: #020203; color: #a7f3d0; padding: 1rem; border-radius: 4px; height: 100px; overflow-y: auto; border: 1px solid #27272a; margin-bottom: 1.5rem; }
+    </style>
+</head>
+<body>
+
+    <h1>Ciel Engine - Chromium Feature Intercept Suite</h1>
+    <div id="log">System logger pipeline online...</div>
+
+    <!-- 1. FORM RESUBMISSION INTERRUPT -->
+    <div class="section">
+        <h3>1. HTTP POST Form Resubmission Interrupt Tester</h3>
+        <p><strong>Test:</strong> Click the button below to submit a dummy token via an HTTP POST loop. After the page updates, immediately press your keyboard's <strong>F5 / Refresh</strong> key. WebEngine must stop the reload and ask to confirm resubmission.</p>
+        <form method="POST" action="">
+            <input type="hidden" name="transaction_id" value="ciel_post_tx_99218">
+            <button type="submit">Submit State Data via POST</button>
+        </form>
+    </div>
+
+    <!-- 2. BEFORE UNLOAD INTERCEPT -->
+    <div class="section">
+        <h3>2. Unload / Tab Closure Interceptor (onbeforeunload)</h3>
+        <p><strong>Test:</strong> Click the arm button to bind a dirty-state handler to the tab session. Then try to close the tab, write a new address into your panel, or click the link below.</p>
+        <button style="border-color: #f59e0b;" onclick="armUnload()">Arm Dirty State Interceptor</button>
+        <a href="https://example.com" style="margin-left: 20px;">Trigger Outer Domain Navigation</a>
+    </div>
+
+    <!-- 3. FILE PICKER DIALOG -->
+    <div class="section">
+        <h3>3. OS Native File Picker Request</h3>
+        <p><strong>Test:</strong> Click the inputs below. This instructs the engine to dispatch an operating system filesystem browser frame request. You must intercept this in QML to present a unified layout style.</p>
+        <label>Single File:</label> <input type="file" onchange="log('File picked: ' + this.value)"><br/><br/>
+        <label>Multiple Images Only:</label> <input type="file" accept="image/*" multiple onchange="log('Multi-image array attached.')">
+    </div>
+
+    <!-- 4. NATIVE COLOR PICKER DIALOG -->
+    <div class="section">
+        <h3>4. Color Chooser Hex Request</h3>
+        <p><strong>Test:</strong> Clicking this input requests a color selection layout wheel. This triggers engine-level coordinate dialog callbacks rather than simple text fields.</p>
+        <input type="color" id="colorPicker" value="#3b82f6" onchange="log('Color mutated to: ' + this.value)">
+    </div>
+
+    <!-- 5. GEOLOCATION PERMISSION REQUEST -->
+    <div class="section">
+        <h3>5. Geolocation / Device Hardware Permission Prompt</h3>
+        <p><strong>Test:</strong> Click the request button below. This queries core device telemetry coordinates, forcing the browser container framework to evaluate sandboxed host security rules.</p>
+        <button onclick="requestGeo()">Query GPS Coordinates</button>
+    </div>
+
+    <!-- 6. HTTP BASIC AUTHENTICATION -->
+    <div class="section">
+        <h3>6. Server-Side Basic Auth Credential Request</h3>
+        <p><strong>Test:</strong> To test network authorization popup routines, open the live link below. The server will challenge the browser container framework with a `401 Unauthorized` header:</p>
+        <a href="https://httpbin.org" target="_blank">👉 Launch Remote HTTP Basic Auth Challenge Target</a>
+    </div>
+
+    <script>
+        function log(msg) {
+            const el = document.getElementById('log');
+            el.innerHTML += "<br/>[" + new Date().toLocaleTimeString() + "] " + msg;
+            el.scrollTop = el.scrollHeight;
+        }
+
+        if (window.performance && window.performance.navigation.type === window.performance.navigation.TYPE_RELOAD) {
+            log("State Monitor: Page reloaded successfully.");
+        }
+
+        function armUnload() {
+            window.onbeforeunload = function(e) {
+                log("Intercepted clean exit routing tree.");
+                e.preventDefault();
+                return "Unsaved state tracking confirmation.";
+            };
+            log("Tab wrapper intercept armed. Attempt exit or route change.");
+        }
+
+        function requestGeo() {
+            log("Requesting raw device GPS permission path...");
+            navigator.geolocation.getCurrentPosition(
+                (pos) => { log("Success: " + pos.coords.latitude + ", " + pos.coords.longitude); },
+                (err) => { log("Permission Denied/Error code: " + err.message); }
+            );
+        }
+    </script>
+</body>
+</html>

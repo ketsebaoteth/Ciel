@@ -335,6 +335,27 @@ ApplicationWindow {
                                     permissionDropdown.show(engineView, securityOrigin, feature, name, icon);
                                 }
 
+
+    onTooltipRequested: (request) => {
+        request.accepted = true; // Prevent native tooltip
+
+        if (request.text === "" || request.type === TooltipRequest.Hide) {
+            customToolTip.close();
+        } else {
+            customToolTip.text = request.text;
+            
+            // Map engine's local coordinates to the tooltip's parent (Window.contentItem)
+            var mappedPos = engineView.mapToItem(customToolTip.parent, request.x, request.y);
+            customToolTip.openAt(mappedPos.x, mappedPos.y);
+        }
+    }
+
+    // Instantiate the tooltip (it will auto-attach to the window overlay)
+    CielToolTip {
+        id: customToolTip
+    }
+
+
                                 onContextMenuRequested: (request) => {
                                     request.accepted = true; // Prevent the default engine context menu
                                     
@@ -350,7 +371,7 @@ ApplicationWindow {
                                     const targetParent = webContextMenu.parent || window.contentItem;
                                     const mappedPos = engineView.mapToItem(targetParent, rawX, rawY);
                                     
-                                    webContextMenu.openAt(mappedPos.x, mappedPos.y);
+                                    webContextMenu.popup(rawX, rawY, this);
                                 }
 
                                 onJavaScriptDialogRequested: (request) => {
@@ -500,9 +521,11 @@ ApplicationWindow {
                             Item {
                                 id: menuCard
                                 anchors.top: parent.top
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.margins: 16
+                                // anchors.left: parent.left
+                                // anchors.right: parent.right
+                                anchors.topMargin: 16
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: Math.min(parent.width - 32, 800)
                                 
                                 height: menuColumn.implicitHeight + 32
                                 
@@ -709,9 +732,9 @@ ApplicationWindow {
     }
 
 
-    CielDropDown {
+    CielContextMenu {
         id: webContextMenu
-        useAbsoluteCoordinates: true
+        // useAbsoluteCoordinates: true
         
         property var contextRequest: null
 
