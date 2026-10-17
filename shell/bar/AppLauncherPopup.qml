@@ -1,5 +1,7 @@
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Hyprland
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Effects
@@ -11,6 +13,8 @@ PopupWindow {
     property var targetWindow
     property rect anchorRect
     property bool isOpen: false
+
+    property var recentApps: []
 
     readonly property real startY: -14
     readonly property real startXScale: 0.88
@@ -26,8 +30,83 @@ PopupWindow {
     readonly property int fadeInDuration: 95
     readonly property int closeDuration: 130
 
+    Shortcut {
+        sequence: "Escape"
+        enabled: root.isOpen
+        onActivated: root.isOpen = false
+    }
+
     function toggle() {
         isOpen = !isOpen;
+    }
+
+    function addRecentApp(app) {
+        if (!app || !app.id)
+            return;
+
+        var entry = {
+            id: app.id,
+            name: app.name || app.id,
+            icon: app.icon || "",
+            exec: app.exec || "",
+            hasIcon: app.hasIcon === true || Quickshell.iconPath(app.icon, true) !== ""
+        };
+
+        var next = [entry];
+        var current = root.recentApps || [];
+        for (var i = 0; i < current.length; ++i) {
+            if (current[i].id !== entry.id)
+                next.push(current[i]);
+        }
+        if (next.length > 8)
+            next = next.slice(0, 8);
+
+        root.recentApps = next;
+        root.saveRecents();
+    }
+
+    function saveRecents() {
+        var payload = JSON.stringify(root.recentApps || []);
+        var encoded = Qt.btoa(payload);
+        recentWriter.command = ["sh", "-c", "mkdir -p \"$HOME/.config/ciel\" && printf '%s' '" + encoded + "' | base64 -d > \"$HOME/.config/ciel/recent-apps.json\""];
+        recentWriter.running = true;
+    }
+
+    function loadRecentsFromText(text) {
+        try {
+            var parsed = JSON.parse(text && text.trim() ? text : "[]");
+            if (!Array.isArray(parsed))
+                return;
+            var cleaned = [];
+            for (var i = 0; i < parsed.length && cleaned.length < 8; ++i) {
+                var item = parsed[i];
+                if (!item || !item.id)
+                    continue;
+                cleaned.push({
+                    id: item.id,
+                    name: item.name || item.id,
+                    icon: item.icon || "",
+                    exec: item.exec || "",
+                    hasIcon: item.hasIcon === true || Quickshell.iconPath(item.icon, true) !== ""
+                });
+            }
+            root.recentApps = cleaned;
+        } catch (e) {
+            root.recentApps = [];
+        }
+    }
+
+    grabFocus: false
+
+    HyprlandFocusGrab {
+        id: outsideClickGrab
+        windows: [root]
+        active: root.isOpen
+
+        onCleared: {
+            if (root.isOpen)
+                root.isOpen = false;
+        }
     }
 
     onIsOpenChanged: {
@@ -50,6 +129,38 @@ PopupWindow {
             if (root.isOpen)
                 searchInput.forceActiveFocus();
         }
+    }
+
+    Process {
+        id: recentLoader
+        command: ["sh", "-c", "cat \"$HOME/.config/ciel/recent-apps.json\" 2>/dev/null || printf '[]'"]
+        running: false
+        property string buffer: ""
+        stdout: SplitParser {
+            onRead: data => {
+                recentLoader.buffer += data;
+            }
+        }
+        onExited: (code, status) => {
+            root.loadRecentsFromText(recentLoader.buffer);
+            recentLoader.buffer = "";
+        }
+    }
+
+    Process {
+        id: recentWriter
+        command: ["sh", "-c", "true"]
+        running: false
+    }
+
+    Process {
+        id: recentLauncher
+        command: []
+        running: false
+    }
+
+    Component.onCompleted: {
+        recentLoader.running = true;
     }
 
     anchor.window: targetWindow
@@ -221,7 +332,7 @@ PopupWindow {
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 20
-            spacing: 16
+            spacing: 10
 
             Rectangle {
                 id: searchBarContainer
@@ -255,7 +366,6 @@ PopupWindow {
                     anchors.rightMargin: 12
                     spacing: 10
 
-                    // Search icon
                     Item {
                         Layout.alignment: Qt.AlignVCenter
                         width: 14
@@ -351,6 +461,145 @@ PopupWindow {
                 }
             }
 
+            Text {
+                visible: searchInput.text === "" && root.recentApps.length > 0
+                text: "Recents"
+                color: Theme.textSecondary
+                font.pixelSize: 12
+                renderType: Text.NativeRendering
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+            }
+
+            ListView {
+                id: recentList
+                visible: searchInput.text === "" && root.recentApps.length > 0
+                Layout.fillWidth: true
+                Layout.preferredHeight: visible ? 96 : 0
+                height: 96
+                orientation: ListView.Horizontal
+                clip: true
+                cacheBuffer: 80
+                model: root.recentApps
+                boundsBehavior: Flickable.StopAtBounds
+                flickableDirection: Flickable.HorizontalFlick
+
+                delegate: Item {
+                    id: recentDelegate
+                    width: 118
+                    height: 96
+
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 4
+                        radius: Theme.metrics.radiusMd
+                        color: recentMouse.containsMouse ? Theme.surfaceHover : Theme.surface
+
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: 70
+                                easing.type: Easing.OutQuad
+                            }
+                        }
+                    }
+
+                    Item {
+                        id: recentContent
+                        anchors.fill: parent
+                        scale: recentMouse.pressed ? 0.94 : 1.0
+
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: 80
+                                easing.type: Easing.OutQuad
+                            }
+                        }
+
+                        Item {
+                            id: recentIconBox
+                            width: 44
+                            height: 44
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.top: parent.top
+                            anchors.topMargin: 14
+                            clip: true
+
+                            CielSquircle {
+                                anchors.fill: parent
+                                visible: !modelData.hasIcon || recentIcon.status !== Image.Ready
+                                radius: 10
+                                color: Theme.surfaceHover
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: modelData.name ? modelData.name.charAt(0).toUpperCase() : "◇"
+                                    color: Theme.textSecondary
+                                    font.pixelSize: 16
+                                    font.bold: true
+                                    renderType: Text.NativeRendering
+                                }
+                            }
+
+                            Image {
+                                id: recentIcon
+                                anchors.fill: parent
+                                fillMode: Image.PreserveAspectFit
+                                sourceSize: Qt.size(64, 64)
+                                asynchronous: true
+                                source: Quickshell.iconPath(modelData.icon, true)
+                                visible: modelData.hasIcon && status === Image.Ready
+                            }
+                        }
+
+                        Text {
+                            anchors.top: recentIconBox.bottom
+                            anchors.topMargin: 8
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            text: modelData.name || ""
+                            color: recentMouse.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                            font.pixelSize: 11
+                            elide: Text.ElideRight
+                            horizontalAlignment: Text.AlignHCenter
+                            renderType: Text.NativeRendering
+
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: 100
+                                }
+                            }
+                        }
+                    }
+
+                    MouseArea {
+                        id: recentMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (modelData.exec) {
+                                recentLauncher.command = ["sh", "-c", modelData.exec + " &"];
+                                recentLauncher.running = true;
+                            }
+                            root.addRecentApp(modelData);
+                            root.isOpen = false;
+                        }
+                    }
+                }
+            }
+
+            Text {
+                visible: searchInput.text === ""
+                text: "All Apps"
+                color: Theme.textSecondary
+                font.pixelSize: 12
+                renderType: Text.NativeRendering
+                Layout.fillWidth: true
+                Layout.topMargin: 2
+            }
+
             Item {
                 id: appGridArea
                 Layout.fillWidth: true
@@ -366,6 +615,7 @@ PopupWindow {
                     anchors.fill: parent
                     searchFilter: searchInput.text
                     onAppLaunched: app => {
+                        root.addRecentApp(app);
                         root.isOpen = false;
                     }
                 }

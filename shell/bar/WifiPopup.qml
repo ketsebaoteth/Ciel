@@ -1,5 +1,6 @@
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Hyprland
 import Quickshell.Io
 import QtQuick
 import QtQuick.Layouts
@@ -19,6 +20,13 @@ PopupWindow {
 
     property var rawNetworks: []
     property string lastConnectError: ""
+    property string activeSsid: ""
+
+    Shortcut {
+        sequence: "Escape"
+        enabled: root.isOpen
+        onActivated: root.isOpen = false
+    }
 
     ListModel {
         id: networkModel
@@ -27,25 +35,65 @@ PopupWindow {
     function setInitialActiveSsid(ssid) {
         if (!ssid)
             return;
+        root.activeSsid = ssid;
+        var found = false;
         for (var i = 0; i < networkModel.count; ++i) {
             if (networkModel.get(i).ssid === ssid) {
                 networkModel.setProperty(i, "connected", true);
-                return;
+                found = true;
+            } else {
+                networkModel.setProperty(i, "connected", false);
             }
         }
-        networkModel.insert(0, {
-            ssid: ssid,
-            bssid: "",
-            connected: true,
-            connecting: false
-        });
+        if (!found) {
+            networkModel.insert(0, {
+                ssid: ssid,
+                bssid: "",
+                connected: true,
+                connecting: false
+            });
+        }
+    }
+
+    function updateConnectedState(ssid, connected) {
+        if (connected)
+            root.activeSsid = ssid;
+        else if (root.activeSsid === ssid)
+            root.activeSsid = "";
+
+        for (var i = 0; i < networkModel.count; ++i) {
+            var item = networkModel.get(i);
+            if (item.ssid === ssid) {
+                networkModel.setProperty(i, "connected", connected);
+                networkModel.setProperty(i, "connecting", false);
+            } else if (connected) {
+                networkModel.setProperty(i, "connected", false);
+            }
+        }
+
+        if (connected) {
+            var found = false;
+            for (var j = 0; j < networkModel.count; ++j) {
+                if (networkModel.get(j).ssid === ssid) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                networkModel.insert(0, {
+                    ssid: ssid,
+                    bssid: "",
+                    connected: true,
+                    connecting: false
+                });
+            }
+        }
     }
 
     function collectLine(line) {
         line = line.trim();
         if (!line)
             return;
-
         var fields = [];
         var current = "";
         for (var i = 0; i < line.length; ++i) {
@@ -60,14 +108,12 @@ PopupWindow {
 
         if (fields.length < 3)
             return;
-
         var inUse = fields[0].indexOf("*") !== -1;
         var bssid = fields[1].replace(/\\/g, "").trim();
         var ssid = fields.slice(2).join(":").replace(/\\:/g, ":").trim();
 
         if (!ssid || !bssid)
             return;
-
         for (var j = 0; j < rawNetworks.length; ++j) {
             if (rawNetworks[j].ssid === ssid) {
                 if (inUse) {
@@ -109,13 +155,22 @@ PopupWindow {
                     break;
                 }
             }
-            if (!found && !networkModel.get(i).connected) {
+            if (!found && !networkModel.get(i).connected && !networkModel.get(i).connecting) {
                 networkModel.remove(i);
             }
         }
 
         for (var k = 0; k < rawNetworks.length; ++k) {
             networkModel.append(rawNetworks[k]);
+        }
+
+        if (root.activeSsid) {
+            for (var m = 0; m < networkModel.count; ++m) {
+                if (networkModel.get(m).ssid === root.activeSsid) {
+                    networkModel.setProperty(m, "connected", true);
+                    break;
+                }
+            }
         }
 
         root.isScanning = false;
@@ -140,7 +195,8 @@ PopupWindow {
                 networkModel.setProperty(i, "connected", false);
             } else {
                 networkModel.setProperty(i, "connecting", false);
-                networkModel.setProperty(i, "connected", false);
+                if (networkModel.get(i).connected)
+                    networkModel.setProperty(i, "connected", false);
             }
         }
 
@@ -149,6 +205,19 @@ PopupWindow {
         connectProcess.targetSsid = ssid;
         connectProcess.command = ["nmcli", "d", "w", "c", bssid ? bssid : ssid];
         connectProcess.running = true;
+    }
+
+    grabFocus: false
+
+    HyprlandFocusGrab {
+        id: outsideClickGrab
+        windows: [root]
+        active: root.isOpen
+
+        onCleared: {
+            if (root.isOpen)
+                root.isOpen = false;
+        }
     }
 
     Process {
@@ -166,6 +235,8 @@ PopupWindow {
         onExited: (code, status) => {
             if (code === 0 && activeWifiProc.activeSsid !== "") {
                 root.setInitialActiveSsid(activeWifiProc.activeSsid);
+            } else if (code === 0) {
+                root.updateConnectedState(root.activeSsid, false);
             }
             activeWifiProc.activeSsid = "";
         }
@@ -201,6 +272,7 @@ PopupWindow {
                 if (targetIdx >= 0 && targetIdx < networkModel.count) {
                     networkModel.setProperty(targetIdx, "connecting", false);
                     networkModel.setProperty(targetIdx, "connected", true);
+                    root.activeSsid = targetSsid;
                 }
             } else {
                 if (targetIdx >= 0 && targetIdx < networkModel.count) {
@@ -208,7 +280,50 @@ PopupWindow {
                     networkModel.setProperty(targetIdx, "connected", false);
                 }
             }
+            activeWifiProc.running = true;
             root.scanNetworks();
+        }
+    }
+
+    Process {
+        id: nmMonitor
+        command: ["nmcli", "monitor"]
+        running: true
+
+        stdout: SplitParser {
+            onRead: data => {
+                var line = data.trim();
+                if (!line)
+                    return;
+                var connMatch = line.match(/has connection\s+'([^']+)'/i);
+                if (connMatch) {
+                    root.updateConnectedState(connMatch[1], true);
+                    if (root.isOpen)
+                        root.scanNetworks();
+                    return;
+                }
+
+                if (/disconnected/i.test(line) || /state change:.*-> disconnected/i.test(line)) {
+                    root.updateConnectedState(root.activeSsid, false);
+                    if (root.isOpen)
+                        root.scanNetworks();
+                    return;
+                }
+
+                if (/NetworkManager is now in the/i.test(line) || /device \(wifi\)/i.test(line) || /Access point/i.test(line) || /state change/i.test(line) || /Connectivity/i.test(line)) {
+                    if (!activeWifiProc.running)
+                        activeWifiProc.running = true;
+                    if (root.isOpen && !scanProcess.running)
+                        root.scanNetworks();
+                }
+            }
+        }
+
+        onExited: (code, status) => {
+            Qt.callLater(function () {
+                if (!nmMonitor.running)
+                    nmMonitor.running = true;
+            });
         }
     }
 
@@ -289,7 +404,6 @@ PopupWindow {
             yScale: root.startYScale
         }
 
-        // Popup chassis: CielSquircle with Theme tokens
         CielSquircle {
             anchors.fill: parent
             radius: popupContent.radius
