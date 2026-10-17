@@ -89,9 +89,9 @@ QtObject {
                 persistentStoragePath: "${storage}"
                 cachePath: "${storage}/cache"
                 httpCacheType: WebEngineProfile.DiskHttpCache`), manager, "profile-" + profileId);
-        profileCache[profileId] = p;
-        return p;
-    }
+    	profileCache[profileId] = p
+        ExtensionManager.attachProfile(profileId, p)
+        return p}
 
     function privateProfile() {
         if (!privateProfileObj) {

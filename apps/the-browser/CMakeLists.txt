@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Quick Qml WebEngineQuick WebEngineCore WebChannel DBus Sql)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Quick Qml WebEngineQuick WebEngineCore WebChannel Network Concurrent DBus Sql)
 find_package(Qt6Keychain REQUIRED)
 
 
@@ -43,6 +43,8 @@ target_link_libraries(ciel-browser PRIVATE
     Qt6::WebEngineCore
     Qt6::WebChannel
     Qt6Keychain::Qt6Keychain
+    Qt6::Network
+    Qt6::Concurrent
     Qt6::DBus
     Qt6::Sql
 )

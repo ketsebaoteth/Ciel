@@ -77,37 +77,45 @@ ApplicationWindow {
         tabRail.downloadsPopup.open();
     }
 
-    readonly property var pageScripts: {
-        var list = [
-            {
-                name: "ciel-passwords",
-                sourceCode: PasswordManager.injectedScript(),
-                injectionPoint: WebEngineScript.DocumentReady,
-                worldId: WebEngineScript.ApplicationWorld,
-                runsOnSubFrames: false
-            }
-        ];
+    readonly property var pageScripts: [{
+        name: "ciel-passwords",
+        sourceCode: PasswordManager.injectedScript(),
+        injectionPoint: WebEngineScript.DocumentReady,
+        worldId: WebEngineScript.ApplicationWorld,
+        runsOnSubFrames: false
+    }]
 
-        if (isPrivate)
-            return list;
+    property string dismissedStoreId: ""
+    property string storeStatus: ""        // "", "Installed", or an error
 
-        var ext = ExtensionManager.scripts;
-        var points = {
-            start: WebEngineScript.DocumentCreation,
-            end: WebEngineScript.DocumentReady,
-            idle: WebEngineScript.Deferred
-        };
-        for (var i = 0; i < ext.length; ++i) {
-            list.push({
-                name: ext[i].name,
-                sourceCode: ext[i].sourceCode,
-                injectionPoint: points[ext[i].runAt] ?? WebEngineScript.Deferred,
-                worldId: ext[i].world === "main" ? WebEngineScript.MainWorld : WebEngineScript.UserWorld,
-                runsOnSubFrames: ext[i].allFrames
-            });
-        }
-        return list;
+    onStoreExtensionIdChanged: storeStatus = ""
+
+    readonly property string storeExtensionId: {
+        var v = webContainer.currentActiveView
+        var u = (v && v.url) ? v.url.toString() : ""
+        if (!/^https:\/\/(chromewebstore\.google\.com|chrome\.google\.com\/webstore)\//.test(u))
+            return ""
+        return ExtensionManager.storeIdFromUrl(u)
     }
+
+    property int extRevision: 0
+
+    Connections {
+        target: ExtensionManager
+        function onExtensionsChanged() { window.extRevision++ }
+        function onInstallSucceeded() { window.storeStatus = "Installed" }
+        function onInstallFailed(message) { window.storeStatus = message }
+    }
+
+    readonly property bool storeAlreadyInstalled: {
+        window.extRevision
+        return ExtensionManager.isStoreInstalled(storeExtensionId)
+    }
+
+    // Stays up while installing and while the "Installed" / error message is showing.
+    readonly property bool storeBannerVisible:
+        !isPrivate && storeExtensionId !== "" && storeExtensionId !== dismissedStoreId
+        && (!storeAlreadyInstalled || ExtensionManager.busy || storeStatus !== "")
 
     function openFind() {
         var v = webContainer.currentActiveView;
@@ -391,6 +399,7 @@ ApplicationWindow {
         anchors.bottom: window.railOrientation === Qt.Vertical ? parent.bottom : undefined
         z: 10
         isPrivate: window.isPrivate
+	webProfile: window.currentWebProfile
         onHistoryRequested: openHistoryTab()
         onProfilesRequested: {
             var model = workspaceModel.tabModel(workspaceModel.currentWorkspaceId);
@@ -599,6 +608,9 @@ ApplicationWindow {
                             onLoaded: {
                                 if (!item)
                                     return;
+
+				ExtensionManager.loadEnabled()
+
                                 if (!pageContainer.isInternalPage) {
                                     item.url = pageContainer.urlStr;
                                 }
@@ -808,6 +820,10 @@ ApplicationWindow {
                         ExtensionsPage {
                             anchors.fill: parent
                             visible: pageContainer.isExtensionsPage
+                            onOpenTabRequested: targetUrl => {
+                                if (workspaceContainer.wsTabModel)
+                                    workspaceContainer.wsTabModel.addTab(targetUrl)
+                            }
                         }
 
                         SitePermissionsPage {
@@ -1178,6 +1194,77 @@ ApplicationWindow {
                     ColorAnimation {
                         duration: 120
                     }
+                }
+            }
+        }
+    }
+
+    Item {
+        id: storeBanner
+        anchors.top: webContainer.top
+        anchors.horizontalCenter: webContainer.horizontalCenter
+        anchors.topMargin: 12
+        width: Math.min(webContainer.width - 32, 560)
+        height: storeRow.implicitHeight + 24
+        z: 70
+
+        property real shownP: window.storeBannerVisible ? 1.0 : 0.0
+        Behavior on shownP {
+            CielSpring { damping: 0.32; spring: 5.2; mass: 1.0; epsilon: 0.001 }
+        }
+        visible: shownP > 0.01
+        opacity: Math.max(0.0, Math.min(1.0, shownP * 1.8))
+        scale: 0.94 + shownP * 0.06
+
+        CielSquircle {
+            anchors.fill: parent
+            color: Theme.surface
+            borderWidth: 1
+            borderColor: Theme.border
+        }
+
+        RowLayout {
+            id: storeRow
+            anchors.fill: parent
+            anchors.margins: 12
+            spacing: 12
+
+            CielIcon {
+                icon: "puzzle-piece"
+                size: Theme.MEDIUM
+                Layout.alignment: Qt.AlignVCenter
+            }
+
+            Text {
+                text: window.storeStatus !== "" ? window.storeStatus
+                    : (ExtensionManager.busy ? "Downloading extension…" : "Add this extension to Ciel?")
+                font.pixelSize: 14
+                font.weight: Font.Medium
+                color: Theme.textPrimary
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+            }
+
+            CielButton {
+                text: "Add to Ciel"
+                primary: !ExtensionManager.busy
+                enabled: !ExtensionManager.busy
+		opacity: !ExtensionManager.busy && window.storeStatus !== "Installed"
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: {
+                    window.storeStatus = ""
+                    ExtensionManager.installFromStore(window.storeExtensionId)
+                }
+            }
+
+            CielIconButton {
+                icon: "x"
+                size: Theme.XSMALL
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: {
+                    window.dismissedStoreId = window.storeExtensionId
+                    window.storeStatus = ""
                 }
             }
         }

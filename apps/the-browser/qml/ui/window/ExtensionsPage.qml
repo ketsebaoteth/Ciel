@@ -14,6 +14,10 @@ Item {
         id: extModel
     }
 
+    signal openTabRequested(string url)
+
+    function openExtensionPage(u) { root.openTabRequested(u) }
+
     function reloadExtensions() {
         var items = ExtensionManager.list();
         extModel.clear();
@@ -25,20 +29,21 @@ Item {
     onVisibleChanged: if (visible)
         reloadExtensions()
 
-    Connections {
-        target: ExtensionManager
-        function onExtensionsChanged() {
-            if (root.visible && !extList.busyClosing)
-                root.reloadExtensions();
-        }
-    }
-
     FolderDialog {
         id: folderDialog
         title: "Select an unpacked extension folder"
-        onAccepted: root.errorText = ExtensionManager.installFromFolder(selectedFolder.toString())
+        onAccepted: ExtensionManager.installFromFolder(selectedFolder.toString())
     }
 
+    Connections {
+        target: ExtensionManager
+        function onInstallFailed(message) { root.errorText = message }
+        function onInstallSucceeded() { root.errorText = "" }
+        function onExtensionsChanged() {
+            if (root.visible && !extList.busyClosing)
+                root.reloadExtensions()
+        }
+    }
     Item {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
@@ -79,8 +84,42 @@ Item {
                     }
                 }
 
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    CielSearch {
+                        id: storeField
+                        Layout.preferredWidth: 400
+                        Layout.preferredHeight: 32
+                        placeholder: "Chrome Web Store URL or extension ID"
+                        showBorder: true
+                        preContent: Item {}
+                        postContent: Item {}
+                        onAccepted: query => {
+                            root.errorText = ""
+                            ExtensionManager.installFromStore(query)
+                        }
+                    }
+
+		    Item {
+			Layout.fillWidth: true
+		    }
+
+                    CielButton {
+                        text: ExtensionManager.busy ? "Installing…" : "Install"
+                        primary: !ExtensionManager.busy && storeField.text !== ""
+                        enabled: !ExtensionManager.busy && storeField.text !== ""
+                        onClicked: {
+                            root.errorText = ""
+                            ExtensionManager.installFromStore(storeField.text)
+                        }
+                    }
+                }
+
                 Text {
-                    text: "Supports content-script extensions (Manifest V2/V3). Background pages, popups and " + "most chrome.* APIs are not available. Changes apply to pages loaded afterwards. " + "Extensions don't run in private windows."
+                    text: "Loads unpacked Chrome extensions (Manifest V3 preferred). Support depends on the "
+                          + "Chromium APIs that Qt WebEngine exposes. Extensions don't run in private windows."
                     font.pixelSize: 12
                     color: Theme.textSecondary
                     wrapMode: Text.Wrap
@@ -282,9 +321,17 @@ Item {
                                             }
                                         }
 
+                                        // CielButton {
+                                        //     visible: model.popupUrl !== "" && model.enabled
+                                        //     text: "Open"
+                                        //     primary: false
+                                        //     Layout.alignment: Qt.AlignVCenter
+                                        //     onClicked: root.openExtensionPage(model.popupUrl)
+                                        // }
+
                                         CielButton {
                                             text: model.enabled ? "Disable" : "Enable"
-                                            primary: false
+                                            primary: !model.enabled
                                             enabled: model.error === ""
                                             Layout.alignment: Qt.AlignVCenter
                                             onClicked: ExtensionManager.setEnabled(model.id, !model.enabled)

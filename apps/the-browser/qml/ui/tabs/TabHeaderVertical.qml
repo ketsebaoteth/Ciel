@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtWebEngine
 import Ciel.Ui
 import Ciel.Browser 1.0
 import "../window"
@@ -30,6 +31,43 @@ Item {
     property int permRevision: 0
     property bool permChanged: false
     property var shownKeys: []
+
+    property var webProfile: null
+    property var extensionList: []
+    property string extPopupUrl: ""
+
+    function refreshExtensions() {
+        root.extensionList = ExtensionManager.list().filter(function (e) {
+            return e.enabled && e.popupUrl !== "" && e.error === ""
+        })
+    }
+
+    function openExtensionPopup(ext) {
+        var url = ext.popupUrl
+        extensionMenu.trigger = null
+        permissionsMenu.close()
+        extensionMenu.close()
+        root.extPopupUrl = ""
+        Qt.callLater(function () {
+            extensionMenu.trigger = extPopupAnchor
+            root.extPopupUrl = url
+            extensionMenu.open()
+        })
+    }
+
+    Connections {
+        target: ExtensionManager
+        function onExtensionsChanged() { root.refreshExtensions() }
+    }
+
+    Connections {
+        target: extensionMenu
+        ignoreUnknownSignals: true
+        function onClosed() {
+            root.extPopupUrl = ""
+            extensionMenu.trigger = null
+        }
+    }
 
     readonly property var permFeatures: [
         {
@@ -67,6 +105,11 @@ Item {
     }
 
     function openSiteControls(btn) {
+        root.refreshExtensions();
+        extensionMenu.trigger = null
+        extensionMenu.close()
+        root.extPopupUrl = ""
+
         var wasOpen = permissionsMenu.isOpen;
 
         root.permChanged = false;
@@ -289,6 +332,13 @@ Item {
                         opacity: enabled ? 1.0 : 0.35
                         iconColor: permissionsMenu.opened ? Theme.accent : Theme.textSecondary
                         onClicked: root.openSiteControls(siteControlsBtn)
+
+                        Item {
+                            id: extPopupAnchor
+                            anchors.centerIn: parent
+                            width: 1
+                            height: 1
+                        }
                     }
                 }
             }
@@ -433,6 +483,117 @@ Item {
                     color: Theme.textSecondary
                     wrapMode: Text.Wrap
                     Layout.fillWidth: true
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 3
+                    color: Theme.surface
+                }
+
+                Text {
+                    text: "Extensions"
+                    font.pixelSize: 11
+                    font.weight: Font.Medium
+                    color: Theme.textSecondary
+                }
+
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    visible: root.extensionList.length > 0
+
+                    Repeater {
+                        model: root.extensionList
+
+                        delegate: Item {
+                            width: 36
+                            height: 36
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 8
+                                color: Theme.textPrimary
+                                opacity: extMouse.containsMouse ? 0.08 : 0.0
+                            }
+
+                            Image {
+                                id: extIcon
+                                anchors.centerIn: parent
+                                width: 20
+                                height: 20
+                                source: modelData.iconUrl
+                                sourceSize.width: 40
+                                sourceSize.height: 40
+                                fillMode: Image.PreserveAspectFit
+                                visible: status === Image.Ready
+                            }
+                            CielIcon {
+                                anchors.centerIn: parent
+                                icon: "puzzle-piece"
+                                size: Theme.XSMALL
+                                color: Theme.textSecondary
+                                visible: !extIcon.visible
+                            }
+
+                            MouseArea {
+                                id: extMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.openExtensionPopup(modelData)
+                            }
+                        }
+                    }
+                }
+
+                Text {
+                    visible: root.extensionList.length === 0
+                    text: "No enabled extensions with a popup."
+                    font.pixelSize: 12
+                    color: Theme.textSecondary
+                    Layout.fillWidth: true
+                }
+            }
+        }
+    }
+
+    CielDropDown {
+        id: extensionMenu
+        placement: "bottom"
+
+        Item {
+            id: extBox
+            clip: true
+            implicitWidth: 380
+            implicitHeight: 520
+
+            Loader {
+                id: extLoader
+                anchors.fill: parent
+                active: extensionMenu.opened && root.extPopupUrl !== ""
+
+                sourceComponent: WebEngineView {
+                    id: extView
+                    profile: root.webProfile ? root.webProfile
+                             : (root.activeView ? root.activeView.profile : null)
+                    backgroundColor: "transparent"
+                    settings.javascriptEnabled: true
+                    settings.localStorageEnabled: true
+                    settings.autoLoadImages: true
+
+                    Component.onCompleted: {
+                        if (root.extPopupUrl !== "")
+                            url = root.extPopupUrl
+                    }
+
+                    onJavaScriptConsoleMessage: (level, message, line, source) =>
+                        console.log("[ext-popup]", message, source + ":" + line)
+
+                    onLoadingChanged: info => {
+                        if (info.status === WebEngineLoadingInfo.LoadFailedStatus)
+                            console.warn("[ext-popup] load failed:", info.url, info.errorString)
+                    }
                 }
             }
         }

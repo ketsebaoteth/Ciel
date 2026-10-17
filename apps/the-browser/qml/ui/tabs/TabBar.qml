@@ -17,6 +17,7 @@ Item {
     property bool collapsed: false
     property real tabHeight: 36
     property real pinnedSectionHeight: 0.0
+    property var webProfile: null
 
     property int dragSourceIndex: -1
     property int dragTargetIndex: -1
@@ -171,6 +172,7 @@ Item {
             config: root.config
             browserSettings: root.browserSettings
             onCollapseToggled: root.collapsed = !root.collapsed
+	    webProfile: root.webProfile
             isPrivate: root.isPrivate
             onSitePermissionsRequested: root.sitePermissionsRequested()
         }

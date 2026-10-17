@@ -464,6 +464,18 @@ void ProfileManager::ensureStateTable() {
       QStringLiteral("CREATE TABLE IF NOT EXISTS extensions ("
                      "id TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 1, "
                      "installed_at INTEGER NOT NULL);"));
+    {
+    const QVariantList cols =
+        m_database.query(QStringLiteral("PRAGMA table_info(extensions);"));
+    bool hasStoreId = false;
+    for (const QVariant &c : cols)
+      if (c.toMap().value(QStringLiteral("name")).toString() ==
+          QLatin1String("store_id"))
+        hasStoreId = true;
+    if (!hasStoreId)
+      m_database.execute(QStringLiteral(
+          "ALTER TABLE extensions ADD COLUMN store_id TEXT;"));
+  }
 }
 
 QString ProfileManager::stateValue(const QString &key,

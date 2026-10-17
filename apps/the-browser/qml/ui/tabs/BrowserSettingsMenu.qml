@@ -141,14 +141,21 @@ CielDropDown {
     CielMenuItem {
         text: "Extensions"
         icon: "puzzle-piece"
-        onTriggered: root.extensionsRequested()
+	onTriggered: {
+            root.close();
+	    root.extensionsRequested()
+    	}
     }
 
     CielMenuItem {
         text: "Site Permissions"
         icon: "shield-check"
-        onTriggered: root.sitePermissionsRequested()
+	onTriggered: {
+            root.close();
+	    root.sitePermissionsRequested()
+	}
     }
+
     CielMenuItem {
         text: "Settings"
         icon: "gear-six"
