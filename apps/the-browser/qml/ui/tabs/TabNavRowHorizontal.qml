@@ -66,7 +66,7 @@ Item {
             }
         }
 
-        CielSearch {
+        CielInput {
             id: omniboxHorizontal
             Layout.fillWidth: true
             Layout.preferredHeight: 32

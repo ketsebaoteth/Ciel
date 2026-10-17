@@ -36,8 +36,8 @@ Item {
     readonly property real targetY: root.triggerMode ? root.triggerY : Math.round((root.height - root.contentHeight) / 2)
 
     readonly property real startYOffset: 16
-    readonly property real startXScale: 0.86
-    readonly property real startYScale: 0.76
+    readonly property real startXScale: 1.1 // 0.86
+    readonly property real startYScale: 1.08 // 0.76
 
     readonly property real springY: 4.2
     readonly property real dampingY: 0.34

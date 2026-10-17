@@ -633,6 +633,8 @@ ApplicationWindow {
                                 settings.hyperlinkAuditingEnabled: browserSettings.hyperlinkAuditingEnabled
                                 settings.pdfViewerEnabled: browserSettings.pdfViewerEnabled
                                 settings.scrollAnimatorEnabled: browserSettings.smoothScrolling
+                                settings.javascriptCanAccessClipboard: true
+                                settings.javascriptCanPaste: false
 
                                 Component.onCompleted: zoomFactor = browserSettings.zoomFactor
                                 Connections {
@@ -1270,14 +1272,12 @@ ApplicationWindow {
             anchors.margins: 8
             spacing: 6
 
-            CielSearch {
+            CielInput {
                 id: findInput
                 Layout.fillWidth: true
                 Layout.preferredHeight: 32
                 placeholder: "Find in page"
                 showBorder: false
-                preContent: Item {}
-                postContent: Item {}
                 onTextChanged: findBar.run(false)
                 onAccepted: query => findBar.run(false)
             }
@@ -1497,14 +1497,6 @@ ApplicationWindow {
                     placeholder: "Search or enter URL"
                     showBorder: false
                     Keys.onPressed: event => urlGhost.handleKey(event)
-                    preContent: CielIconButton {
-                        icon: "magnifying-glass"
-                        size: Theme.XSMALL
-                        onClicked: {
-                            if (locationInput.inputField)
-                                locationInput.inputField.forceActiveFocus();
-                        }
-                    }
 
                     postContent: CielIconButton {
                         icon: "arrow-right"
@@ -1821,16 +1813,13 @@ ApplicationWindow {
                 Layout.maximumHeight: 200
             }
 
-            CielSearch {
+            CielInput {
                 id: promptInput
                 visible: jsDialogPopup.dialogType === 2
                 text: jsDialogPopup.dialogDefaultText
                 Layout.fillWidth: true
                 Layout.preferredHeight: 36
                 placeholder: "Enter text..."
-
-                preContent: Item {}
-                postContent: Item {}
 
                 onVisibleChanged: {
                     if (visible) {

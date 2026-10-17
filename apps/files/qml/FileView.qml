@@ -991,12 +991,11 @@ Item {
                     color: Theme.textPrimary
                 }
 
-                CielSearch {
+                CielInput {
                     id: newFolderNameInput
                     Layout.fillWidth: true
                     Layout.preferredHeight: 36
                     placeholder: "folderName"
-                    showIcons: false
                     isPrimary: true
                     onAccepted: {
                         FileListModel.createFolder(newFolderNameInput.text);
@@ -1292,13 +1291,12 @@ Item {
                     Layout.fillWidth: true
                     spacing: 8
 
-                    CielSearch {
+                    CielInput {
                         id: renameField
                         Layout.fillWidth: true
                         Layout.preferredHeight: 36
                         placeholder: "New file name"
                         text: transferPopup.conflictFile
-                        showIcons: false
                         focus: transferPopup.hasConflict
 
                         onAccepted: {
@@ -1435,11 +1433,10 @@ Item {
                     color: Theme.textPrimary
                 }
 
-                CielSearch {
+                CielInput {
                     id: fileCreatedName
                     Layout.fillWidth: true
                     Layout.preferredHeight: 36
-                    showIcons: false
                     isPrimary: true
                     text: "file.txt"
                     placeholder: "file name"
