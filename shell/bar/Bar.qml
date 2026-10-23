@@ -41,7 +41,19 @@ PanelWindow {
         id: workspaceModel
     }
 
-    property int focusedWorkspaceId: 1
+    CaptureService {
+        id: captureService
+    }
+
+    function formatDuration(s) {
+        var m = Math.floor(s / 60);
+        var r = s % 60;
+        return m + ":" + (r < 10 ? "0" : "") + r;
+    }
+
+    property int focusedWorkspaceId: (Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id >= 1) ? Hyprland.focusedWorkspace.id : 1
+    readonly property int workspacesPerPage: 5
+    readonly property int pageStart: Math.min(Math.floor((Math.max(focusedWorkspaceId, 1) - 1) / workspacesPerPage), 1) * workspacesPerPage + 1
     property int chassisWidthNudge: 0
 
     onFocusedWorkspaceIdChanged: {
@@ -106,18 +118,16 @@ PanelWindow {
         try {
             var clients = JSON.parse(text);
             var wsMap = {};
-            var maxWs = 1;
-            var focusedWs = 1;
+            var first = bar.pageStart;
+            var last = first + bar.workspacesPerPage - 1;
+            var focusedWs = bar.focusedWorkspaceId;
 
             for (var i = 0; i < clients.length; ++i) {
                 var c = clients[i];
                 var wsId = c.workspace ? c.workspace.id : null;
 
-                if (wsId === null || wsId < 1 || wsId > 5)
+                if (wsId === null || wsId < first || wsId > last)
                     continue;
-
-                if (wsId > maxWs)
-                    maxWs = wsId;
 
                 if (!wsMap[wsId]) {
                     wsMap[wsId] = {
@@ -128,28 +138,17 @@ PanelWindow {
                     };
                 }
 
-                var appId = c.initialClass || c.class || "";
-                var isFocused = c.focusHistoryID === 0;
-
                 wsMap[wsId].apps.push({
-                    appId: appId,
+                    appId: c.initialClass || c.class || "",
                     title: c.title || "",
                     address: c.address || "",
-                    isFocused: isFocused
+                    isFocused: c.focusHistoryID === 0
                 });
-
-                if (isFocused) {
-                    wsMap[wsId].isActive = true;
-                    focusedWs = wsId;
-                }
             }
-
-            if (focusedWs > maxWs && focusedWs <= 5)
-                maxWs = focusedWs;
 
             var list = [];
 
-            for (var w = 1; w <= maxWs; ++w) {
+            for (var w = first; w <= last; ++w) {
                 if (wsMap[w] && wsMap[w].apps.length > 0) {
                     wsMap[w].apps.sort(function (a, b) {
                         if (a.isFocused && !b.isFocused)
@@ -161,6 +160,7 @@ PanelWindow {
                         return 0;
                     });
 
+                    wsMap[w].isActive = (w === focusedWs);
                     list.push(wsMap[w]);
                 } else {
                     list.push({
@@ -172,8 +172,6 @@ PanelWindow {
                 }
             }
 
-            bar.focusedWorkspaceId = focusedWs;
-            bar.syncWorkspaces(list);
             bar.syncWorkspaces(list);
         } catch (e) {
             fallbackGrouping();
@@ -298,6 +296,17 @@ PanelWindow {
         }
     }
 
+    Connections {
+        target: Hyprland
+
+        function onFocusedWorkspaceChanged() {
+            if (!hyprWatcher.running) {
+                bar.hyprBuffer = "";
+                hyprWatcher.running = true;
+            }
+        }
+    }
+
     component Separator: Rectangle {
         implicitWidth: 1
         implicitHeight: 14
@@ -306,6 +315,82 @@ PanelWindow {
         Layout.preferredHeight: implicitHeight
 
         color: Theme.surfaceHover
+    }
+
+    component CaptureChip: Item {
+        id: chip
+
+        property string icon: ""
+        property string label: ""
+        property color tint: Theme.textPrimary
+        property bool pulsing: false
+
+        signal clicked(var mouse)
+
+        implicitWidth: chipRow.implicitWidth + 14
+        implicitHeight: 28
+
+        Layout.preferredWidth: implicitWidth
+        Layout.preferredHeight: implicitHeight
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 6
+            color: chipMouse.containsMouse ? Theme.surfaceHover : "transparent"
+        }
+
+        Row {
+            id: chipRow
+            anchors.centerIn: parent
+            spacing: 5
+
+            CielIcon {
+                id: chipIcon
+                anchors.verticalCenter: parent.verticalCenter
+                icon: chip.icon
+                size: Theme.SMALL
+                color: chip.tint
+
+                SequentialAnimation on opacity {
+                    running: chip.pulsing
+                    loops: Animation.Infinite
+
+                    NumberAnimation {
+                        to: 0.35
+                        duration: 600
+                        easing.type: Easing.InOutQuad
+                    }
+                    NumberAnimation {
+                        to: 1.0
+                        duration: 600
+                        easing.type: Easing.InOutQuad
+                    }
+
+                    onRunningChanged: {
+                        if (!running)
+                            chipIcon.opacity = 1.0;
+                    }
+                }
+            }
+
+            Text {
+                visible: chip.label !== ""
+                anchors.verticalCenter: parent.verticalCenter
+                text: chip.label
+                color: Theme.textSecondary
+                font.pixelSize: 12
+                font.weight: Font.Medium
+                renderType: Text.NativeRendering
+            }
+        }
+
+        MouseArea {
+            id: chipMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: mouse => chip.clicked(mouse)
+        }
     }
 
     CielSquircle {
@@ -765,6 +850,33 @@ PanelWindow {
             visible: trayRepeater.count > 0
         }
 
+        Separator {
+            visible: trayRepeater.count > 0
+        }
+
+        CaptureChip {
+            id: shotChip
+            visible: captureService.hasScreenshot
+            icon: "corners-out"
+
+            onClicked: mouse => shotPopup.toggle()
+        }
+
+        CaptureChip {
+            id: recordChip
+            visible: captureService.recording || captureService.hasRecording
+            icon: captureService.recording ? "record" : "video-camera"
+            tint: captureService.recording ? "#ff5555" : Theme.textPrimary
+            pulsing: captureService.recording
+            label: captureService.recording ? bar.formatDuration(captureService.recordSeconds) : ""
+
+            onClicked: mouse => recordPopup.toggle()
+        }
+
+        Separator {
+            visible: captureService.hasScreenshot || captureService.recording || captureService.hasRecording
+        }
+
         ControlsButton {
             id: controlsButton
             onClicked: controlsPopup.toggle()
@@ -787,11 +899,74 @@ PanelWindow {
         anchorRect: Qt.rect(0, content.y + 6, bar.width, content.height)
     }
 
+    CapturePopup {
+        id: shotPopup
+
+        kind: "shot"
+        capture: captureService
+        targetWindow: bar
+        anchorRect: Qt.rect(content.x + shotChip.x, content.y + shotChip.y + 6, shotChip.width, shotChip.height)
+    }
+
+    CapturePopup {
+        id: recordPopup
+
+        kind: "record"
+        capture: captureService
+        targetWindow: bar
+        anchorRect: Qt.rect(content.x + recordChip.x, content.y + recordChip.y + 6, recordChip.width, recordChip.height)
+    }
+
     ControlsPopup {
         id: controlsPopup
 
+        capture: captureService
         targetWindow: bar
-
         anchorRect: Qt.rect(content.x + controlsButton.x, content.y + controlsButton.y + 6, controlsButton.width, controlsButton.height)
+    }
+
+    IpcHandler {
+        target: "bar"
+
+        function toggleLauncher(): void {
+            appLauncher.toggle();
+        }
+
+        function toggleControls(): void {
+            controlsPopup.toggle();
+        }
+
+        function toggleWifi(): void {
+            wifiPopup.toggle();
+        }
+
+        function screenshot(): void {
+            captureService.startCapture("shot");
+        }
+
+        function toggleRecording(): void {
+            if (captureService.recording)
+                captureService.stopRecording();
+            else
+                captureService.startCapture("record");
+        }
+
+        function toggleScreenshotPopup(): void {
+            if (captureService.hasScreenshot)
+                shotPopup.toggle();
+        }
+
+        function toggleRecordingPopup(): void {
+            if (captureService.recording || captureService.hasRecording)
+                recordPopup.toggle();
+        }
+
+        function closeAll(): void {
+            appLauncher.isOpen = false;
+            controlsPopup.isOpen = false;
+            wifiPopup.isOpen = false;
+            shotPopup.isOpen = false;
+            recordPopup.isOpen = false;
+        }
     }
 }

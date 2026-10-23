@@ -27,7 +27,7 @@ PopupWindow {
     property bool airplaneEnabled: false
     property bool nightEnabled: false
     property bool micMuted: false
-    property bool recording: false
+    property var capture
     property bool caffeineEnabled: false
 
     property bool perAppPopupOpen: false
@@ -175,7 +175,7 @@ PopupWindow {
 
     Process {
         id: volReader
-        command: ["sh", "-c", "wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null | awk '{print $2}' || pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null | grep -o '[0-9]\\+%' | head -n1 | tr -d '%' | awk '{print $1/100}'"]
+        command: ["sh", "-c", "wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{print $2}'"]
         running: false
         property string buffer: ""
         stdout: SplitParser {
@@ -197,7 +197,7 @@ PopupWindow {
 
     Process {
         id: brightReader
-        command: ["sh", "-c", "brightnessctl g 2>/dev/null && brightnessctl m 2>/dev/null || (cat /sys/class/backlight/*/brightness 2>/dev/null | head -n1; cat /sys/class/backlight/*/max_brightness 2>/dev/null | head -n1)"]
+        command: ["sh", "-c", "brightnessctl g && brightnessctl m"]
         running: false
         property string buffer: ""
         stdout: SplitParser {
@@ -364,16 +364,18 @@ PopupWindow {
         running: false
     }
 
+    // Night light: hyprsunset runs while the toggle is on
     Process {
-        id: screenshotProc
-        command: ["sh", "-c", "mkdir -p \"$HOME/Pictures\" && (grim \"$HOME/Pictures/screenshot-$(date +%Y%m%d-%H%M%S).png\" || gnome-screenshot -f \"$HOME/Pictures/screenshot-$(date +%Y%m%d-%H%M%S).png\" || spectacle -b -n -o \"$HOME/Pictures/screenshot-$(date +%Y%m%d-%H%M%S).png\")"]
-        running: false
+        id: nightProc
+        command: ["hyprsunset", "-t", "4000"]
+        running: root.nightEnabled
     }
 
+    // Keep awake: an idle inhibitor that hypridle respects
     Process {
-        id: recordProc
-        command: ["sh", "-c", "mkdir -p \"$HOME/Videos\" && wf-recorder -f \"$HOME/Videos/recording-$(date +%Y%m%d-%H%M%S).mp4\""]
-        running: false
+        id: caffeineProc
+        command: ["systemd-inhibit", "--what=idle", "--who=Control Center", "--why=Keep Awake", "sleep", "infinity"]
+        running: root.caffeineEnabled
     }
 
     Process {
@@ -382,36 +384,28 @@ PopupWindow {
         running: false
     }
 
-    Process {
-        id: lockProc
-        command: ["loginctl", "lock-session"]
-        running: false
-    }
-
     function takeScreenshot() {
-        if (!screenshotProc.running)
-            screenshotProc.running = true;
+        root.isOpen = false;
+        root.capture.startCapture("shot");
     }
 
     function toggleRecording() {
-        if (root.recording) {
-            recordProc.running = false;
-            root.recording = false;
+        if (root.capture.recording) {
+            root.capture.stopRecording();
         } else {
-            recordProc.running = true;
-            root.recording = true;
+            root.isOpen = false;
+            root.capture.startCapture("record");
         }
+    }
+
+    function lockSession() {
+        Hyprland.dispatch("exec pidof hyprlock || hyprlock");
     }
 
     function toggleMic() {
         root.micMuted = !root.micMuted;
         micProc.command = ["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", root.micMuted ? "1" : "0"];
         micProc.running = true;
-    }
-
-    function lockSession() {
-        if (!lockProc.running)
-            lockProc.running = true;
     }
 
     readonly property real startY: -14
@@ -523,6 +517,13 @@ PopupWindow {
                 renderType: Text.NativeRendering
             }
 
+            Rectangle {
+                id: divider
+                Layout.fillWidth: true
+                height: 1
+                color: Theme.surfaceHover
+            }
+
             Item {
                 Layout.fillWidth: true
                 height: 42
@@ -586,7 +587,6 @@ PopupWindow {
 
                     CielMenuItem {
                         text: "Per App Volumes"
-                        icon: "speaker-high"
                         onTriggered: {
                             root.isOpen = false;
                             audioContextMenu.close();
@@ -648,7 +648,7 @@ PopupWindow {
                         },
                         {
                             key: "shot",
-                            icon: "camera",
+                            icon: "corners-out",
                             label: "Screenshot",
                             active: false
                         },
