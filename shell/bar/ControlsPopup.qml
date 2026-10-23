@@ -690,7 +690,7 @@ PopupWindow {
                             anchors.right: parent.right
                             height: 48
                             radius: 16
-                            color: modelData.active ? Theme.accent : (tileMouse.containsMouse ? Theme.surface : Theme.surfaceHover)
+                            color: modelData.active ? Theme.accent : (tileMouse.containsMouse ? Theme.surfaceHover : Qt.alpha(Theme.surfaceHover, 0.85))
                             borderWidth: 0
                         }
 
@@ -700,7 +700,12 @@ PopupWindow {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             text: modelData.label
-                            color: Theme.textSecondary
+                            color: tileMouse.containsMouse ? Theme.textPrimary : Theme.textSecondary
+			    Behavior on color {
+				    ColorAnimation {
+					    duration: 150
+				    }
+			    }
                             font.pixelSize: 10
                             elide: Text.ElideRight
                             horizontalAlignment: Text.AlignHCenter

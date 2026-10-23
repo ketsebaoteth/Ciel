@@ -19,6 +19,7 @@ PanelWindow {
     property int paddingVertical: 8
     property string hyprBuffer: ""
     property var workspaceApps: ({})
+    property var selectedTrayItem: null
 
     anchors.top: true
     margins.top: 5
@@ -27,11 +28,20 @@ PanelWindow {
     color: "transparent"
 
     Behavior on implicitWidth {
-        CielSpring {
-            damping: 0.32
-            spring: 2.8
-            mass: 1.0
-            epsilon: 0.001
+        SequentialAnimation {
+            NumberAnimation {
+                to: targetValue + (targetValue >= bar.implicitWidth ? 3 : -3)
+                duration: 85
+                easing.type: Easing.OutCubic
+            }
+    
+            SpringAnimation {
+                to: targetValue
+                spring: 38
+                damping: 0.82
+                mass: 1.0
+                epsilon: 0.2
+            }
         }
     }
 
@@ -44,6 +54,45 @@ PanelWindow {
     CaptureService {
         id: captureService
     }
+
+    ListModel {
+        id: clipboardModel
+    }
+    
+    function addClip(kind, path) {
+        if (!path)
+            return;
+        for (var i = 0; i < clipboardModel.count; ++i) {
+            if (clipboardModel.get(i).path === path)
+                return;
+        }
+        clipboardModel.insert(0, {
+            kind: kind,
+            path: path,
+            time: Qt.formatTime(new Date(), "h:mm AP")
+        });
+    }
+    
+    function syncShot() {
+        if (captureService.hasScreenshot)
+            bar.addClip("shot", captureService.screenshotPath);
+    }
+    
+    Connections {
+        target: captureService
+    
+        function onScreenshotPathChanged() { bar.syncShot(); }
+        function onHasScreenshotChanged() { bar.syncShot(); }
+    
+        function onRecordingChanged() {
+            if (!captureService.recording) {
+                recordPopup.isOpen = false;
+                bar.addClip("record", captureService.recordingPath);
+            }
+        }
+    }
+    
+    Component.onCompleted: syncShot()
 
     function formatDuration(s) {
         var m = Math.floor(s / 60);
@@ -324,6 +373,7 @@ PanelWindow {
         property string label: ""
         property color tint: Theme.textPrimary
         property bool pulsing: false
+	property int badge: 0
 
         signal clicked(var mouse)
 
@@ -391,6 +441,30 @@ PanelWindow {
             cursorShape: Qt.PointingHandCursor
             onClicked: mouse => chip.clicked(mouse)
         }
+
+	Rectangle {
+	    visible: chip.badge > 0
+	    anchors.top: parent.top
+	    anchors.right: parent.right
+	    anchors.topMargin: -2
+	    height: 14
+	    width: Math.max(14, badgeText.implicitWidth + 6)
+	    radius: 7
+	    color: Theme.accent
+
+	    Text {
+                id: badgeText
+                anchors.fill: parent
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+
+                text: chip.badge > 99 ? "99+" : String(chip.badge)
+                color: Theme.surface
+                font.pixelSize: 9
+                font.bold: true
+                renderType: Text.NativeRendering
+	    }
+	}
     }
 
     CielSquircle {
@@ -405,6 +479,8 @@ PanelWindow {
         id: content
         anchors.centerIn: parent
         spacing: Theme.metrics.spacingSm
+	width: Math.min(implicitWidth, Math.max(0, bar.width - bar.paddingHorizontal * 2))
+	clip: true
 
         WinButton {
             id: winButton
@@ -422,14 +498,23 @@ PanelWindow {
             Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
 
-            Behavior on implicitWidth {
-                CielSpring {
-                    damping: 0.22
-                    spring: 3.6
-                    mass: 1.0
-                    epsilon: 0.001
-                }
-            }
+	    Behavior on implicitWidth {
+	        SequentialAnimation {
+	    	    NumberAnimation {
+	    	        to: targetValue + (targetValue >= iconStrip.implicitWidth ? 2 : -2)
+	    	        duration: 65
+	    	        easing.type: Easing.OutCubic
+	    	    }
+
+	    	    SpringAnimation {
+	    	        to: targetValue
+	    	        spring: 50 
+	    	        damping: 0.8 
+	    	        mass: 1.0
+	    	        epsilon: 0.25
+	    	    }
+	        }
+	    }
 
             Row {
                 id: iconRow
@@ -805,31 +890,41 @@ PanelWindow {
 
                         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
 
-                        function openNativeMenu() {
+                        function openMenu() {
                             const item = trayIconItem.trayItem;
-
+                        
                             if (!item || !item.hasMenu)
                                 return;
+                        
+                            if (trayPopup.isOpen && bar.selectedTrayItem === item) {
+                                trayPopup.isOpen = false;
+                                return;
+                            }
+                        
+                            const p = trayIconItem.mapToItem(null, 0, 0);
 
-                            const p = trayIconItem.mapToItem(null, 0, trayIconItem.height + 6);
-
-                            item.display(bar, Math.round(p.x), Math.round(p.y));
+			    // DEBUG: the native menu (only for debug purposes)
+			    // const p = trayIconItem.mapToItem(null, 0, trayIconItem.height + 6);
+			    // item.display(bar, Math.round(p.x), Math.round(p.y));
+                        
+                            bar.selectedTrayItem = item;
+                            trayPopup.anchorRect = Qt.rect(p.x, p.y + 6, trayIconItem.width, trayIconItem.height);
+                            trayPopup.isOpen = true;
                         }
 
                         onClicked: mouse => {
                             const item = trayIconItem.trayItem;
-
+                        
                             if (!item)
                                 return;
-
+                        
                             if (mouse.button === Qt.LeftButton) {
-                                if (item.onlyMenu) {
-                                    openNativeMenu();
-                                } else {
+                                if (item.onlyMenu)
+                                    openMenu(); // openNativeMenu();
+                                else
                                     item.activate();
-                                }
                             } else if (mouse.button === Qt.RightButton) {
-                                openNativeMenu();
+                                openMenu(); // openNativeMenu();
                             } else if (mouse.button === Qt.MiddleButton) {
                                 item.secondaryActivate();
                             }
@@ -850,32 +945,33 @@ PanelWindow {
             visible: trayRepeater.count > 0
         }
 
-        Separator {
-            visible: trayRepeater.count > 0
-        }
+	CaptureChip {
+	    id: clipboardChip
+	    visible: clipboardModel.count > 0
+	    icon: "clipboard"
+	    badge: clipboardModel.count
+	
+	    onClicked: mouse => clipboardPopup.toggle()
+	}
+	
+	CaptureChip {
+	    id: recordChip
+	    visible: captureService.recording
+	    icon: "record"
+	    tint: "#ff5555"
+	    pulsing: true
+	    label: bar.formatDuration(captureService.recordSeconds)
+	
+	    onClicked: mouse => recordPopup.toggle()
+	}
+	
+	Separator {
+	    visible: clipboardModel.count > 0 || captureService.recording
+	}
 
-        CaptureChip {
-            id: shotChip
-            visible: captureService.hasScreenshot
-            icon: "corners-out"
-
-            onClicked: mouse => shotPopup.toggle()
-        }
-
-        CaptureChip {
-            id: recordChip
-            visible: captureService.recording || captureService.hasRecording
-            icon: captureService.recording ? "record" : "video-camera"
-            tint: captureService.recording ? "#ff5555" : Theme.textPrimary
-            pulsing: captureService.recording
-            label: captureService.recording ? bar.formatDuration(captureService.recordSeconds) : ""
-
-            onClicked: mouse => recordPopup.toggle()
-        }
-
-        Separator {
-            visible: captureService.hasScreenshot || captureService.recording || captureService.hasRecording
-        }
+        // Separator {
+        //     visible: captureService.hasScreenshot || captureService.recording || captureService.hasRecording
+        // }
 
         ControlsButton {
             id: controlsButton
@@ -899,13 +995,13 @@ PanelWindow {
         anchorRect: Qt.rect(0, content.y + 6, bar.width, content.height)
     }
 
-    CapturePopup {
-        id: shotPopup
-
-        kind: "shot"
+    ClipboardPopup {
+        id: clipboardPopup
+    
         capture: captureService
+        store: clipboardModel
         targetWindow: bar
-        anchorRect: Qt.rect(content.x + shotChip.x, content.y + shotChip.y + 6, shotChip.width, shotChip.height)
+        anchorRect: Qt.rect(content.x + clipboardChip.x, content.y + clipboardChip.y + 6, clipboardChip.width, clipboardChip.height)
     }
 
     CapturePopup {
@@ -923,6 +1019,13 @@ PanelWindow {
         capture: captureService
         targetWindow: bar
         anchorRect: Qt.rect(content.x + controlsButton.x, content.y + controlsButton.y + 6, controlsButton.width, controlsButton.height)
+    }
+
+    TrayPopup {
+        id: trayPopup
+    
+        targetWindow: bar
+        trayItem: bar.selectedTrayItem
     }
 
     IpcHandler {
@@ -951,22 +1054,23 @@ PanelWindow {
                 captureService.startCapture("record");
         }
 
-        function toggleScreenshotPopup(): void {
-            if (captureService.hasScreenshot)
-                shotPopup.toggle();
+        function toggleClipboard(): void {
+            if (clipboardModel.count > 0)
+                clipboardPopup.toggle();
         }
-
+        
         function toggleRecordingPopup(): void {
-            if (captureService.recording || captureService.hasRecording)
+            if (captureService.recording)
                 recordPopup.toggle();
         }
-
+        
         function closeAll(): void {
             appLauncher.isOpen = false;
             controlsPopup.isOpen = false;
             wifiPopup.isOpen = false;
-            shotPopup.isOpen = false;
+            clipboardPopup.isOpen = false;
             recordPopup.isOpen = false;
+	    trayPopup.isOpen = false;
         }
     }
 }
